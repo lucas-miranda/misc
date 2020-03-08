@@ -1,0 +1,5 @@
+#!/bin/bash
+
+KITTY_PATH=~/.local/kitty.app/bin/kitty
+
+$KITTY_PATH $@
