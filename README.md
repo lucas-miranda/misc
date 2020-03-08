@@ -1,2 +1,2 @@
-# utilities
-Small scripts and tools.
+# misc
+Small scripts, config files and tools.
