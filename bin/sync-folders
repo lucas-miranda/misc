@@ -1,0 +1,526 @@
+#!/bin/bash
+#
+# Lucas A. Miranda 2019
+# https://github.com/lucas-miranda
+#
+
+#
+# sync-folders SOURCE_FOLDER TARGET_FOLDER [OPTIONS]..."
+#
+
+### verify requirements
+
+which "find" > /dev/null
+if [ "$?" -eq "0" ]
+then
+    find="find"
+else
+    if [[ "$OSTYPE" == "win32" ]]
+    then
+        # We'll need gnu find, not windows find
+        git_find="C:/Program Files/Git/usr/bin/find.exe"
+
+        if [ -f "$git_find" ]
+        then
+            find=$git_find
+        fi
+    fi
+
+    if [ -z "$find" ]
+    then
+        echo "Error: find command not found."
+        exit 1
+    fi
+fi
+
+
+# text
+
+file_unknown_text="Unknown:"
+file_error_text="Error:"
+file_copied_text="Copied:"
+file_already_copied_text="Already copied:"
+file_ignored_text="Ignored:"
+
+# standard icons 
+
+file_unknown_text_icon="!"
+file_error_text_icon="x"
+file_copied_text_icon="+"
+file_already_copied_text_icon="*"
+file_ignored_text_icon="~"
+
+# special icons 
+#   need a patched font to show the icons
+#   such as: https://github.com/tonsky/FiraCode
+#            https://github.com/ryanoasis/nerd-fonts 
+#            or similars
+
+file_unknown_icon=""
+file_error_icon=""
+file_copied_icon=""
+file_already_copied_icon=""
+file_ignored_icon=""
+
+###
+
+show_usage() {
+    echo "Usage: sync-folders SOURCE_FOLDER TARGET_FOLDER [OPTIONS]..."
+}
+
+show_help() {
+    show_usage
+    echo "
+Options:
+  -f, --force                                       Force file copy, even if it 
+                                                      already exists
+  -m, --mark-style STYLE                            Change file status mark style
+                                                      STYLE values: icon, text-icon, text
+  -r, --recursive                                   Search recursively through folders
+  -n, --ignore-filename FILENAME [FILENAMES]...     Register one or more filenames to ignore
+  -t, --ignore-filetype FILETYPE [FILETYPE]...      Register one or more filetypes to ignore
+  -v, --verbose                                     Make program be more talkactive
+  -h, --help                                        Show this message"
+}
+
+show_help_tip() {
+    echo "Use --help or -h to show more info."
+}
+
+loading_icon() {
+    case "$1" in
+        "0")
+            echo "|"
+            return 1
+            ;;
+        "1")
+            echo "/"
+            return 2
+            ;;
+        "2")
+            echo "-"
+            return 3
+            ;;
+        "3")
+            echo "\\"
+            return 4
+            ;;
+        "4")
+            echo "|"
+            return 5
+            ;;
+        "5")
+            echo "/"
+            return 6
+            ;;
+        "6")
+            echo "-"
+            return 7
+            ;;
+        "7")
+            echo "\\"
+            return 0
+            ;;
+        *)
+            echo "|"
+            ;;
+    esac
+
+    return 0
+}
+
+update_progress() {
+    if [ "$3" == "" ] || [ "$3" -le "-1" ] 
+    then
+        echo "Modified  $1, Ignored  $2                 "
+    else
+        progress_icon=$(loading_icon $3)
+        loading_id=$?
+        echo -ne "Modified  $1, Ignored  $2 $progress_icon \r"
+        return $loading_id
+    fi
+
+    return 0
+}
+
+containsValue() {
+    local check_value="$1"
+    shift
+    values=("$@")
+    for value in "${values[@]}"
+    do
+        if [ "$value" == $check_value ]
+        then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+###
+
+original_folder=$(pwd)
+
+# source folder
+source_folder_minimal=${1%/} # ensure to remove last '/', if exists
+
+if [ "${source_folder_minimal:0:1}" == "~" ]
+then
+    source_folder=${source_folder_minimal/\~/$HOME}
+elif [[ "$source_folder_minimal" == "$HOME"* ]]
+then
+    source_folder=$source_folder_minimal
+else
+    source_folder="$original_folder/$source_folder_minimal"
+fi
+
+# target folder
+target_folder_minimal=${2%/} # ensure to remove last '/', if exists
+
+if [ "${target_folder_minimal:0:1}" == "~" ]
+then
+    target_folder=${target_folder_minimal/\~/$HOME}
+elif [[ "$target_folder_minimal" == "$HOME"* ]]
+then
+    target_folder=$target_folder_minimal
+else
+    target_folder="$original_folder/$target_folder_minimal"
+fi
+
+verbose=false
+force=false
+indicators_type="text-icon" # icon, text or text-icon
+recursive_search=false
+ignore_filenames=()
+ignore_filetypes=()
+ignore_filetypes_full=""
+
+### parse and validate args
+
+start_options_index=1
+
+if [ "$#" -ge "3" ]
+then
+    start_options_index=3
+fi
+
+for ((i = $start_options_index; i <= $#; i++))
+do
+    arg=${!i}
+
+    if [ "$arg" == "-v" ] || [ "$arg" == "--verbose" ]
+    then
+        verbose=true
+    elif [ "$arg" == "-f" ] || [ "$arg" == "--force" ]
+    then
+        force=true
+    elif [ "$arg" == "-m" ] || [ "$arg" == "--mark-style" ]
+    then
+        next_i=$(($i + 1))
+
+        if [ "$next_i" -le "$#" ]
+        then
+            value=${!next_i}
+            if [ "$value" != "icon" ] && [ "$value" != "text-icon" ] && [ "$value" != "text" ] 
+            then
+                echo "Error: Accepted mark-style values are: icon, text-icon or text."
+                echo ""
+                show_usage
+                show_help_tip
+                exit 1
+            fi
+
+            indicators_type=$value
+        fi
+
+        i=$next_i
+    elif [ "$arg" == "-r" ] || [ "$arg" == "--recursive" ]
+    then
+        recursive_search=true
+    elif [ "$arg" == "-n" ] || [ "$arg" == "--ignore-filename" ]
+    then
+        next_i=$((i + 1))
+
+        while [ "$next_i" -le "$#" ]
+        do
+            value=${!next_i}
+
+            if [ ${value:0:1} == "-" ]
+            then
+                break
+            fi
+
+            ignore_filenames+=("$value")
+            next_i=$((next_i + 1))
+        done
+
+        if [ "$next_i" -eq "$((i + 1))" ]
+        then
+            echo "Error: Expecting at least one filename to ignore as arg #$next_i"
+            echo ""
+            show_usage
+            show_help_tip
+            exit 1
+        fi
+
+        i=$((next_i - 1))
+    elif [ "$arg" == "-t" ] || [ "$arg" == "--ignore-filetype" ]
+    then
+        next_i=$((i + 1))
+
+        while [ "$next_i" -le "$#" ]
+        do
+            value=${!next_i}
+
+            if [ ${value:0:1} == "-" ]
+            then
+                break
+            fi
+
+            ignore_filetypes+=("$value")
+            next_i=$((next_i + 1))
+
+            if [ -z "$ignore_filetypes_full" ]
+            then
+                ignore_filetypes_full="$value"
+            else
+                ignore_filetypes_full="$ignore_filetypes_full|$value"
+            fi
+        done
+
+        if [ "$next_i" -eq "$((i + 1))" ]
+        then
+            echo "Error: Expecting at least one filetype to ignore as arg #$next_i"
+            echo ""
+            show_usage
+            show_help_tip
+            exit 1
+        fi
+
+        i=$((next_i - 1))
+    elif [ "$arg" == "-h" ] || [ "$arg" == "--help" ]
+    then
+        show_help
+        exit 0
+    fi
+done
+
+if [ -z "$source_folder_minimal" ]
+then
+    echo "Error: Expected a source folder as arg #1."
+    echo ""
+    show_usage
+    show_help_tip
+    exit 1
+elif [ ! -d "$source_folder" ]
+then
+    echo "Error: Expected a folder as source (arg #1)."
+    echo ""
+    show_usage
+    show_help_tip
+    exit 1
+fi
+
+if [ -z "$target_folder_minimal" ]
+then
+    echo "Error: Expected a target folder as arg #2."
+    echo ""
+    show_usage
+    show_help_tip
+    exit 1
+elif [ ! -d "$target_folder" ]
+then
+    echo "Error: Expected a folder as target (arg #2)."
+    echo ""
+    show_usage
+    show_help_tip
+    exit 1
+fi
+
+if $verbose
+then
+    echo "* Ignoring filenames: ${ignore_filenames[@]}"
+    echo "* Ignoring filetypes: ${ignore_filetypes[@]}"
+fi
+
+### prepare marks
+
+file_unknown_mark=""
+file_error_mark=""
+file_copied_mark=""
+file_already_copied_mark=""
+file_ignored_mark=""
+
+if [ "$indicators_type" == "icon" ]
+then
+    file_unknown_mark=$file_unknown_icon
+    file_error_mark=$file_error_icon
+    file_copied_mark=$file_copied_icon
+    file_already_copied_mark=$file_already_copied_icon
+    file_ignored_mark=$file_ignored_icon
+elif [ "$indicators_type" == "text-icon" ]
+then
+    file_unknown_mark=$file_unknown_text_icon
+    file_error_mark=$file_error_text_icon
+    file_copied_mark=$file_copied_text_icon
+    file_already_copied_mark=$file_already_copied_text_icon
+    file_ignored_mark=$file_ignored_text_icon
+elif [ "$indicators_type" == "text" ]
+then
+    file_unknown_mark=$file_unknown_text
+    file_error_mark=$file_error_text
+    file_copied_mark=$file_copied_text
+    file_already_copied_mark=$file_already_copied_text
+    file_ignored_mark=$file_ignored_text
+fi
+
+### prepare find command
+
+list_files_cmd="find ."
+
+if ! $recursive_search
+then
+    list_files_cmd="$list_files_cmd -maxdepth 1"
+fi
+
+#ignore_filenames_expr=""
+#for ignore_filename in "${ignore_filenames[@]}"
+#do
+    #ignore_filenames_expr="$ignore_filenames_expr ! -name $ignore_filename"
+#done
+
+#if [ -n "$ignore_filenames_expr" ]
+#then
+    #list_files_cmd="$list_files_cmd ($ignore_filenames_expr )"
+#fi
+
+list_files_cmd="$list_files_cmd -type f -printf %P;"
+
+### main
+
+echo "Source: $source_folder_minimal"
+echo "Target: $target_folder_minimal"
+echo ""
+
+modified_files=0
+ignored_files=0
+already_copied_files=0
+error_files=0
+
+loading_id=0
+if ! $verbose
+then
+    update_progress $modified_files $ignored_files $loading_id
+    loading_id=$?
+fi
+
+mkdir "$target_folder" --parents
+cd "$source_folder"
+
+while IFS= read -r -d ';' file
+do
+    mark=$file_unknown_mark
+
+    # 0 => ok; 1 => not ok;
+    copy_file=1
+    ignore_file=1
+
+    if [ ! -z "$ignore_filetypes" ]
+    then
+        #for ext in "${ignore_filetypes[@]}"
+        #do
+        echo "$file" | grep --extended-regexp "\.($ignore_filetypes_full)$" > /dev/null
+        found=$?
+        if [ "$found" -eq "0" ]
+        then
+            ignore_file=0
+            #break
+        fi
+        #done
+    fi
+
+    if [ "$ignore_file" -ne "0" ] && [ ! -z "$ignore_filenames" ]
+    then
+        containsValue $file "${ignore_filenames[@]}"
+
+        found=$?
+        if [ "$found" -eq "0" ]
+        then
+            ignore_file=$found
+        fi
+    fi
+
+    if [ "$ignore_file" -eq "0" ]
+    then
+        mark=$file_ignored_mark
+        ignored_files=$((ignored_files + 1)) 
+    else
+        if [ -f "$target_folder/$file" ]
+        then
+            filesize=$(stat -c %s "$source_folder/$file")
+            last_modification=$(stat -c %Y "$source_folder/$file")
+            target_filesize=$(stat -c %s "$target_folder/$file")
+            target_last_modification=$(stat -c %Y "$target_folder/$file")
+
+            if [ "$last_modification" -gt "$target_last_modification" ] || [ "$filesize" -ne "$target_filesize" ]
+            then
+                copy_file=0
+            fi
+        else
+            copy_file=0
+        fi
+
+        if [ "$copy_file" -eq "0" ]
+        then
+            # prepare file parent folders at target folder
+            filename=$(basename "$file")
+            foldername=${file/$filename/}
+
+            if [ ! -z "$foldername" ]
+            then
+                mkdir "$target_folder/$foldername" --parents
+            fi
+
+            # copy file
+            cp "$file" "$target_folder/$file"
+
+            # statistics
+            if [ -f "$target_folder/$file" ]
+            then
+                mark=$file_copied_mark
+                modified_files=$((modified_files + 1)) 
+            else
+                mark=$file_error_mark
+                error_files=$((error_files + 1)) 
+            fi
+        else
+            mark=$file_already_copied_mark
+            already_copied_files=$((already_copied_files + 1)) 
+        fi
+    fi
+
+    if $verbose
+    then
+        echo " $mark $file"
+    else
+        update_progress $modified_files $ignored_files $loading_id
+        loading_id=$?
+    fi
+done <<EOT
+$($list_files_cmd)
+EOT
+
+### post-execution
+
+if $verbose
+then
+    echo ""
+fi
+
+update_progress $modified_files $ignored_files
+echo "Verified  $((modified_files + ignored_files + already_copied_files + error_files)), Error  $error_files"
+
+### return to original folder
+
+cd "$original_folder"
