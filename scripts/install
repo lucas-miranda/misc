@@ -1,0 +1,411 @@
+#!/bin/bash -e
+
+#
+# Install and configure every relevant tool 
+#   from folders and another sources
+#
+# TODO:
+#   - Add Arch based support
+#
+# Supported:
+#   Any debian based distribution 
+#   or any linux dist with requirements installed
+#
+# Minimum Requirements:
+#   - which
+#       only to check if apt actually exists
+#       some distributions use specific package managers
+#
+#   - apt
+#       debian based will use it to install packages
+#
+# At the end, this should be installed:
+#   - github.com/lucas-miranda/dev-env
+#       all my dev configs repo
+#
+#   - kitty
+#       a cool gpu accelerated terminal emulator
+#       it supports ligatures
+#
+#   - qtile
+#       highly customizable window manager
+#
+#   - neofetch
+#       shows current system info
+#
+#   - bin/* -> /bin/
+#       my bin executable scripts
+#
+#   - usr/bin/* -> /usr/bin/
+#       user specific bin
+#
+#   - usr/games/* -> /usr/games/
+#       games scripts
+#
+
+#
+# config
+#
+
+INTERMEDIATE_FOLDER=obj/
+
+# check for minimum requirements
+
+if [ "$OSTYPE" != "linux-gnu" ] && 
+then
+    echo "Error: Unsupported OS '$OSTYPE'."
+    exit 1
+fi
+
+which apt > /dev/null
+if [ "$?" -ne "0" ]
+then
+    echo "Error: 'apt' not found."
+    exit 1
+fi
+
+#
+# start 
+#
+
+cd ..
+root_folder=$(pwd)
+mkdir -p "$INTERMEDIATE_FOLDER"
+
+echo "> Preparing to install everything..."
+echo "======================================"
+
+which sudo > /dev/null
+if [ "$?" -eq "0" ]
+then
+    echo "> First, a quickly apt-get update..."
+    sudo apt-get -y update
+    echo "===================================="
+fi
+
+echo "> Creating common folders..."
+echo "======================================"
+
+cd "$HOME/"
+mkdir --parents "Downloads/" "Documents/" "Music/" "Videos/" "bin/" "Animes/" "Images/"
+
+###############
+## utilities ##
+###############
+
+echo " utilities "
+echo "-----------"
+
+echo "- wget"
+echo "  > Installing..."
+echo ""
+
+sudo apt-get -y install wget
+
+echo ""
+echo "  > Done!"
+
+echo "- unzip"
+echo "  > Installing..."
+echo ""
+
+sudo apt-get -y install unzip
+
+echo ""
+echo "  > Done!"
+
+echo "- git"
+echo "  > Installing..."
+echo ""
+
+sudo apt-get -y install git
+
+echo ""
+echo "  > Done!"
+
+################
+## dev config ##
+################
+
+echo " dev config "
+echo "------------"
+
+dev_config_url="https://github.com/lucas-miranda/dev-env.git"
+
+echo "> Verifying..."
+echo ""
+
+if [ -d "$HOME/.config/dev/" ]
+then
+    remote_url=$(git remote get-url origin)
+    if [ "$remote_url" != "$dev_config_url" ]
+    then
+        echo "Error: Folder '$HOME/.config/dev/' is been used already."
+        echo ""
+    else
+        echo "> Updating..."
+        echo ""
+
+        cd "$HOME/.config/dev/"
+        git pull
+        cd "$root_folder"
+
+        echo ""
+        echo "> Done!"
+    fi
+else
+    echo "> Installing..."
+    echo ""
+
+    git clone "$dev_config_url" $HOME/.config/dev/
+
+    echo ""
+    echo "> Done!"
+fi
+
+############
+## neovim ##
+############
+
+echo " neovim "
+echo "--------"
+
+echo "> Preparing..."
+echo ""
+
+mkdir --parents "$INTERMEDIATE_FOLDER/neovim/"
+wget "https://github.com/neovim/neovim/releases/download/v0.4.3/nvim.appimage"
+
+echo ""
+echo "> Done!"
+
+echo "> Installing..."
+
+sudo mkdir --parents /opt/neovim/
+sudo mv nvim.appimage /opt/neovim/
+
+sudo echo "#!/bin/bash
+
+/opt/neovim/nvim.appimage \$@" >> /bin/nvim
+
+echo ""
+echo "> Done!"
+
+###########
+## kitty ##
+###########
+
+echo " kitty "
+echo "-------"
+
+echo "> Installing..."
+echo ""
+
+sudo apt-get -y install kitty 
+
+echo ""
+echo "> Done!"
+
+###########
+## qtile ##
+###########
+
+echo " qtile "
+echo "-------"
+
+echo "> Installing..."
+echo ""
+
+sudo apt-get -y install qtile
+
+echo ""
+echo "> Done!"
+
+echo "> Configuring..."
+
+echo "* /usr/share/xsessions entry"
+sudo echo "[Desktop Entry]
+Name=Qtile Custom
+Comment=Qtile Session
+Exec=/etc/X11/Xsession
+Type=Application
+Keywords=wm;tiling" >> /usr/share/xsessions/custom.desktop
+
+echo "* user .xsessions"
+if [ ! -f "$HOME/.xsession" ]
+then
+    echo "#!/bin/sh" >> $HOME/.xsession
+fi
+
+echo "
+export KITTY_CONFIG_DIRECTORY=\"/home/luke/.config/dev/kitty/\"
+exec qtile -c $HOME/.config/dev/qtile/config.py" >> $HOME/.xsession
+
+echo "> Done!"
+
+############
+## brave  ##
+############
+
+echo " brave browser "
+echo "---------------"
+
+echo "> Installing..."
+sudo apt-get -y install brave-browser
+echo "> Done!"
+
+############
+## others ##
+############
+
+echo " others "
+echo "--------"
+
+echo "- neofetch"
+echo "  > Installing..."
+echo ""
+
+sudo apt-get -y install neofetch
+
+echo ""
+echo "  > Done!"
+
+#################
+## misc scripts #
+#################
+
+echo " misc scripts "
+echo "--------------"
+
+echo "> Copying bin/ scripts"
+echo ""
+sudo cp "bin/*" /bin -r
+echo ""
+echo "> Copying usr/bin/ scripts"
+echo ""
+sudo cp "usr/bin/*" /usr/bin
+echo ""
+echo "> Copying usr/game/ scripts"
+echo ""
+sudo cp "usr/game/*" /usr/games
+echo ""
+echo "> Done!"
+
+##########
+## fonts #
+##########
+
+echo " fonts "
+echo "-------"
+
+FONTS_OUTPUT_DIR="$HOME/.fonts/"
+
+echo "> Preparing..."
+
+# output root dir
+mkdir --parents "$FONTS_OUTPUT_DIR"
+
+# fonts intermediate folder
+cd "$INTERMEDIATE_FOLDER/"
+mkdir --parents "fonts/"
+cd "fonts/"
+
+echo "> Installing..."
+
+#
+# Fira Code
+#
+echo "- Fira Code"
+
+# output fira code dir
+mkdir --parents "$FONTS_OUTPUT_DIR/Fira Code/"
+
+# ensure "fira code/" intermediate doesn't exists
+if [ -d "fira code/" ]
+then
+    rm -rfd "fira code/"
+fi
+
+# downloanding and unzipping font
+mkdir "fira code/"
+cd "fira code/"
+wget "https://github.com/tonsky/FiraCode/releases/download/2/FiraCode_2.zip"
+unzip FiraCode_2.zip
+
+# moving otf to output dir
+mv otf/ "$FONTS_OUTPUT_DIR/Fira Code/otf/"
+
+# back to fonts/ intermediate folder
+cd ..
+
+echo ""
+echo "> Done!"
+
+#
+# Google Noto Color Emoji
+#
+echo "- Google Noto Color Emoji"
+
+# output
+rm -rfd "$FONTS_OUTPUT_DIR/Noto Color Emoji/"
+
+# intermediate
+rm -rfd "Noto Color Emoji/"
+mkdir "Noto Color Emoji/"
+
+# download and extract
+cd "Noto Color Emoji/"
+wget "https://noto-website-2.storage.googleapis.com/pkgs/NotoColorEmoji-unhinted.zip"
+unzip NotoColorEmoji-unhinted.zip
+rm NotoColorEmoji-unhinted.zip
+cd ..
+
+# move to output
+mv "Noto Color Emoji/" "$FONTS_OUTPUT_DIR/Noto Color Emoji/"
+
+echo ""
+echo "> Done!"
+
+#
+# Fura Code (Nerd Fonts)
+#
+echo "- Fura Code (Nerd Fonts)"
+
+# output
+rm -rfd "$FONTS_OUTPUT_DIR/Fura Code/"
+
+# intermediate
+rm -rfd "Fura Code/"
+mkdir "Fura Code/"
+
+# download and extract
+cd "Fura Code/"
+wget "https://github.com/ryanoasis/nerd-fonts/releases/download/v2.1.0/FiraCode.zip"
+unzip FiraCode.zip
+rm FiraCode.zip
+
+# move to output
+ls -1 | grep -E -v "Fira Code.+Complete\.otf" | xargs rm
+cd ..
+mv "Fura Code/" "$FONTS_OUTPUT_DIR/Fura Code/"
+
+echo ""
+echo "> Done!"
+
+# fonts end
+
+echo "> Clearing and updating font cache..."
+echo ""
+
+fc-cache -f -v
+
+echo ""
+echo "> Done!"
+
+#
+# end
+#
+
+echo "=========================================="
+echo "> Everything was installed and configured!"
+echo ""
