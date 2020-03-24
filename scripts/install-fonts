@@ -1,0 +1,117 @@
+#!/bin/bash -e
+
+INTERMEDIATE_FOLDER=obj/
+
+cd ..
+root_folder=$(pwd)
+mkdir -p "$INTERMEDIATE_FOLDER"
+
+echo " Fonts"
+echo "======================================"
+
+FONTS_OUTPUT_DIR="$HOME/.fonts/"
+
+echo "> Preparing..."
+
+# output root dir
+mkdir --parents "$FONTS_OUTPUT_DIR"
+
+# fonts intermediate folder
+cd "$INTERMEDIATE_FOLDER/"
+mkdir --parents "fonts/"
+cd "fonts/"
+
+echo "> Installing..."
+
+#
+# Fira Code
+#
+echo "- Fira Code"
+
+# output fira code dir
+mkdir --parents "$FONTS_OUTPUT_DIR/Fira Code/"
+
+# ensure "fira code/" intermediate doesn't exists
+if [ -d "fira code/" ]
+then
+    rm -rfd "fira code/"
+fi
+
+# downloanding and unzipping font
+mkdir "fira code/"
+cd "fira code/"
+wget "https://github.com/tonsky/FiraCode/releases/download/2/FiraCode_2.zip"
+unzip FiraCode_2.zip
+
+# moving otf to output dir
+mv otf/ "$FONTS_OUTPUT_DIR/Fira Code/otf/"
+
+# back to fonts/ intermediate folder
+cd ..
+
+echo ""
+echo "> Done!"
+
+#
+# Google Noto Color Emoji
+#
+echo "- Google Noto Color Emoji"
+
+# output
+rm -rfd "$FONTS_OUTPUT_DIR/Noto Color Emoji/"
+
+# intermediate
+rm -rfd "Noto Color Emoji/"
+mkdir "Noto Color Emoji/"
+
+# download and extract
+cd "Noto Color Emoji/"
+wget "https://noto-website-2.storage.googleapis.com/pkgs/NotoColorEmoji-unhinted.zip"
+unzip NotoColorEmoji-unhinted.zip
+rm NotoColorEmoji-unhinted.zip
+cd ..
+
+# move to output
+mv "Noto Color Emoji/" "$FONTS_OUTPUT_DIR/Noto Color Emoji/"
+
+echo ""
+echo "> Done!"
+
+#
+# Fura Code (Nerd Fonts)
+#
+echo "- Fura Code (Nerd Fonts)"
+
+# output
+rm -rfd "$FONTS_OUTPUT_DIR/Fura Code/"
+
+# intermediate
+rm -rfd "Fura Code/"
+mkdir "Fura Code/"
+
+# download and extract
+cd "Fura Code/"
+wget "https://github.com/ryanoasis/nerd-fonts/releases/download/v2.1.0/FiraCode.zip"
+unzip FiraCode.zip
+rm FiraCode.zip
+
+# move to output
+ls -1Q | grep -E -v "Fira Code.+Complete\.otf" | xargs rm
+cd ..
+mv "Fura Code/" "$FONTS_OUTPUT_DIR/Fura Code/"
+
+echo ""
+echo "> Done!"
+
+# fonts end
+
+echo "> Clearing and updating font cache..."
+echo ""
+
+fc-cache -f -v
+
+echo ""
+echo "> Done!"
+
+echo "=========================================="
+echo "  Fonts was installed and configured!"
