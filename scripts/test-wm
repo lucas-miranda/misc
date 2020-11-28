@@ -1,0 +1,28 @@
+#!/bin/sh
+
+if [[ "$#" -lt "1" ]]
+then
+    echo "Missing arg #1: window manager full path."
+    exit 1
+fi
+
+WM_PATH=$1
+SCREEN_SIZE=${SCREEN_SIZE:-800x600}
+XDISPLAY=${XDISPLAY:-:1}
+
+Xephyr +extension RANDR -ac -screen ${SCREEN_SIZE} ${XDISPLAY} &
+XEPHYR_PID=$!
+echo "-> Xephyr PID: $XEPHYR_PID"
+
+(
+    sleep 1
+    env DISPLAY=${XDISPLAY} $WM_PATH &
+    WM_PID=$!
+
+    # just to ensure process will terminated when user requests
+    trap 'kill $WM_PID; echo "-> WM ($WM_PATH) process ($WM_PID) killed"' EXIT
+
+    echo "-> WM ($WM_PATH) PID: $WM_PID"
+    wait $WM_PID
+    kill $XEPHYR_PID
+)
