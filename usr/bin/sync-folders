@@ -309,6 +309,7 @@ done
 if [ -z "$source_folder_minimal" ]
 then
     echo "Error: Expected a source folder as arg #1."
+    echo "       But got '$source_folder_minimal'"
     echo ""
     show_usage
     show_help_tip
@@ -316,6 +317,7 @@ then
 elif [ ! -d "$source_folder" ]
 then
     echo "Error: Expected a folder as source (arg #1)."
+    echo "       But got '$source_folder'"
     echo ""
     show_usage
     show_help_tip
@@ -325,6 +327,7 @@ fi
 if [ -z "$target_folder_minimal" ]
 then
     echo "Error: Expected a target folder as arg #2."
+    echo "       But got '$target_folder_minimal'"
     echo ""
     show_usage
     show_help_tip
@@ -332,6 +335,7 @@ then
 elif [ ! -d "$target_folder" ]
 then
     echo "Error: Expected a folder as target (arg #2)."
+    echo "       But got '$target_folder'"
     echo ""
     show_usage
     show_help_tip
