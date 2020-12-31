@@ -1,0 +1,108 @@
+#!/bin/bash -e
+
+WALLPAPERS_FOLDER="$HOME/Images/desktop-background"
+FIRST_FOUND=0
+ALLOW_REPEAT=0
+ENABLE_WAL=0
+
+# handle args
+
+while [ "$#" -gt "0" ]
+do
+    case "$0" in
+        "--first-found" | "-f") FIRST_FOUND=1;;
+        "--allow-repeat" | "-r") ALLOW_REPEAT=1;;
+        "--enable-wal" | "-w") ENALBE_WAL=1;;
+    esac
+
+    shift
+done
+
+#
+
+screen_count=$(xrandr --listmonitors | grep Monitors | grep -o -E "([0-9]+)$")
+
+if [ "$screen_count" -eq "0" ]
+then
+    echo "Error: Monitor not available."
+    exit 1
+fi
+
+wallpapers_by_screen=()
+
+#
+
+images=($(ls -p "$WALLPAPERS_FOLDER" | grep -v / | grep -E "\.(png|jpg|jpeg)$"))
+images_length=${#images[@]}
+
+if [ "$images_length" -eq "0" ]
+then
+    echo "Image files wasn't found at '$WALLPAPERS_FOLDER'."
+    exit 1
+fi
+
+if [ "$screen_count" -gt "$images_length" ]
+then
+    echo "Warning: Image files at '$WALLPAPERS_FOLDER' isn't enought to guarantee an unique wallpaper to each monitor."
+    echo "Reverting to wallpaper allowed repeat mode."
+fi
+
+if [ "$FIRST_FOUND" -eq "1" ]
+then
+    for ((i=0; i <= $screen_count; i++))
+    do
+        image_id=$i
+
+        if [ "$image_id" >= "$images_length" ]
+        then
+            image_id=$((images_length - 1))
+        fi
+
+        wallpapers_by_screen+=("${images[$image_id]}")
+    done
+else
+    if [ "$images_length" -ge "$screen_count" ] && [ "$ALLOW_REPEAT" -eq "0" ]
+    then
+        for image_id in $(shuf -i0-$((images_length - 1)) -n$screen_count)
+        do
+            wallpapers_by_screen+=("${images[$image_id]}")
+        done
+    else
+        for image_id in $(shuf -i0-$((images_length - 1)) -r -n$screen_count)
+        do
+            wallpapers_by_screen+=("${images[$image_id]}")
+        done
+    fi
+fi
+
+wallpapers_as_args=""
+wallpapers_length=${#wallpapers_by_screen[@]}
+
+if [ "$wallpapers_length" -gt "1" ]
+then
+    for ((i=0; i < $wallpapers_length; i++))
+    do
+        wallpaper_name="${wallpapers_by_screen[$i]}"
+        wallpapers_as_args+="$WALLPAPERS_FOLDER/$wallpaper_name "
+        echo "Monitor $i: Wallpaper has been changed to '$wallpaper_name'!"
+    done
+else
+    wallpaper_name="${wallpapers_by_screen[0]}"
+    wallpapers_as_args="$WALLPAPERS_FOLDER/$wallpaper_name"
+    echo "Wallpaper has been changed to '$wallpaper_name'!"
+fi
+
+if [ "$ENABLE_WAL" -eq "1" ]
+then
+    # works with wal, if it's installed
+    which wal > /dev/null
+    if [ "$?" -eq "0" ]
+    then
+        wal -q -n -i "$wallpapers_as_args"
+    fi
+fi
+
+# defines wallpaper
+feh --bg-scale "$wallpapers_as_args"
+
+exit $?
