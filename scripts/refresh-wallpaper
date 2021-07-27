@@ -103,6 +103,6 @@ then
 fi
 
 # defines wallpaper
-feh --bg-scale "$wallpapers_as_args"
+feh --bg-fill "$wallpapers_as_args"
 
 exit $?
