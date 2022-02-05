@@ -1,0 +1,3 @@
+#!/bin/bash
+
+curl https://raw.githubusercontent.com/tibiamaps/tibia-maps-installer-linux/main/install-tibia-maps > install-tibia-maps; chmod +x install-tibia-maps
