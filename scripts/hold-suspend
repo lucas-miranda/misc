@@ -1,0 +1,14 @@
+#!/bin/sh
+
+FORMER_DURATION="$(xset q | grep Standby | cut -d' ' -f4)"
+
+on_exit() {
+    xset dpms $FORMER_DURATION $FORMER_DURATION $FORMER_DURATION
+    echo ""
+    echo "Screen DPMS reset to $((FORMER_DURATION / 60)) minutes"
+}
+
+trap on_exit EXIT
+xset s off -dpms
+echo "Screen DPMS turned off"
+sleep infinity
