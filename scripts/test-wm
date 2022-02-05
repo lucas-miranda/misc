@@ -10,12 +10,12 @@ WM_PATH=$1
 SCREEN_SIZE=${SCREEN_SIZE:-800x600}
 XDISPLAY=${XDISPLAY:-:1}
 
-Xephyr +extension RANDR -ac -screen ${SCREEN_SIZE} ${XDISPLAY} &
-XEPHYR_PID=$!
-echo "-> Xephyr PID: $XEPHYR_PID"
-
 (
-    sleep 1
+    Xephyr +xinerama +extension RANDR -br -ac -terminate -verbosity 10 -screen ${SCREEN_SIZE} ${XDISPLAY} &
+    XEPHYR_PID=$!
+    echo "-> Xephyr PID: $XEPHYR_PID"
+
+    sleep 2
     env DISPLAY=${XDISPLAY} $WM_PATH &
     WM_PID=$!
 
